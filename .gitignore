@@ -1,0 +1,27 @@
+// vue project gitignore
+node_modules
+dist
+build
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.development
+.env.test
+.env.production
+.env.local
+
+// hardhat project gitignore
+hardhat/node_modules
+hardhat/artifacts
+hardhat/cache
+hardhat/types
+hardhat/coverage
+hardhat/dist
+hardhat/build
+hardhat/.DS_Store
+hardhat/.env.local
+hardhat/.env.development.local
+hardhat/.env.test.local
+hardhat/.env.production.local
