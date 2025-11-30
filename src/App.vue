@@ -205,8 +205,8 @@
             </div>
           </div>
 
-                      <!-- FHE Voting -->
-                      <FheVoting 
+                      <!-- Account Overview -->
+                      <AccountOverview 
                         v-if="isConnected && fhevmStatus === 'ready'"
                         :account="account"
                         :chainId="chainId"
@@ -228,7 +228,7 @@
                       />
 
                       <!-- FHE Ratings Demo -->
-                      <FheRatings 
+                      <DepositToken 
                         :account="account"
                         :chainId="chainId"
                         :isConnected="isConnected"
@@ -246,8 +246,9 @@ import { ref, computed } from 'vue'
 import { ethers } from 'ethers'
 import { initializeFheInstance, publicDecrypt } from './lib/fhevm'
 import FheCounter from './components/FheCounter.vue'
-import FheRatings from './components/FheRatings.vue'
 import FheVoting from './components/FheVoting.vue'
+import AccountOverview from './components/AccountOverview.vue'
+import DepositToken from './components/DepositToken.vue'
 
 // Contract configuration
 const CONTRACT_ADDRESSES = {
@@ -404,10 +405,6 @@ const disconnectWallet = () => {
   chainId.value = 0
   isConnected.value = false
   fheInstance.value = null
-  countHandle.value = ''
-  decryptedCount.value = null
-  isIncrementing.value = false
-  isDecrementing.value = false
   isDecrypting.value = false
   fhevmStatus.value = 'idle'
   fhevmError.value = ''

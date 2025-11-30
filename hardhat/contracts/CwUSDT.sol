@@ -21,8 +21,8 @@ interface IERC20 {
 contract CwUSDT is ZamaEthereumConfig {
     // ==================== State Variables ====================
     
-    /// @dev Reference to the underlying MockUSDT ERC20 token (immutable for gas optimization)
-    IERC20 public immutable mockUsdt;
+    /// @dev Reference to the underlying USDT ERC20 token (immutable for gas optimization)
+    IERC20 public immutable usdt;
     
     /// @dev Encrypted account balances (euint128 handles managed by FHEVM)
     /// Stores the encrypted balance for each user address
@@ -57,43 +57,17 @@ contract CwUSDT is ZamaEthereumConfig {
     /// Updated only after verified _userDecryptCallback
     mapping(address => uint256) public userDecryptedBalances;
     
-    /// @dev Audit flag: marks balances that can be decrypted without user's private key
-    /// Used for compliance/regulatory audits; any address can call makeBalancePubliclyDecryptable
-    mapping(address => bool) public isBalancePubliclyDecryptable;
-    
     // ==================== Access Control Lists (ACLs) ====================
     
     /// @dev Grant/revoke transfer allowance: owner => spender => allowed
     /// Similar to ERC20 allowance but tracks boolean access rather than amount
     mapping(address => mapping(address => bool)) public transferAllowance;
     
-    /// @dev Transient access for atomic swap operations: owner => spender => expiryBlock
-    /// Access automatically expires when block number exceeds expiryBlock
-    mapping(address => mapping(address => uint256)) public transientSwapAccess;
-    
-    /// @dev Fine-grained balance read access: user => accessor => canAccess
-    /// Controls who can read a user's (decrypted) balance; owner always has access
-    mapping(address => mapping(address => bool)) public balanceAccessors;
-    
-    // ==================== Error Tracking ====================
-    
-    /// @dev Stores the last error code for each user (from non-reverting encrypted operations)
-    /// Error code 0 = no error, 1 = insufficient balance, etc.
-    mapping(address => uint256) public lastErrorCode;
-    
-    /// @dev Human-readable error descriptions keyed by error code
-    mapping(uint256 => string) public errorDescriptions;
-    
     // ==================== Replay Protection ====================
     
     /// @dev Tracks processed request IDs to prevent replay attacks on decryption/withdrawal callbacks
     /// requestId => processed flag; set to true after successful callback
     mapping(bytes32 => bool) public processedRequests;
-    
-    // ==================== Error Codes ====================
-    
-    uint256 constant ERROR_NONE = 0;
-    uint256 constant ERROR_INSUFFICIENT_BALANCE = 1;
     
     // ==================== Events ====================
     
@@ -104,7 +78,7 @@ contract CwUSDT is ZamaEthereumConfig {
     event Withdraw(address indexed user, uint256 amount);
     
     /// @dev Emitted when an encrypted transfer completes (regardless of success/failure)
-    event EncryptedTransfer(address indexed from, address indexed to, uint256 encryptedAmount);
+    event EncryptedTransfer(address indexed from, address indexed to, euint128 encryptedAmount);
     
     /// @dev Emitted when an encrypted transfer fails (e.g., insufficient balance)
     /// Transfers do not revert; errors are tracked and emitted as events
@@ -122,23 +96,14 @@ contract CwUSDT is ZamaEthereumConfig {
     /// @dev Emitted when _userDecryptCallback is called and balance is decrypted and stored
     event UserDecryptionComplete(address indexed user, uint256 decryptedBalance);
     
-    /// @dev Emitted when a user's balance is marked for public (audit) decryption
-    event BalancePubliclyDecryptable(address indexed user, uint256 timestamp);
-    
     /// @dev Emitted when transfer allowance is granted or revoked
     event TransferAllowanceGranted(address indexed owner, address indexed spender, bool allowed);
-    
-    /// @dev Emitted when transient swap access is granted with expiry block
-    event TransientSwapAccessGranted(address indexed owner, address indexed spender, uint256 expiryBlock);
-    
-    /// @dev Emitted when an error code is set for a user operation
-    event ErrorCodeSet(address indexed user, uint256 errorCode, string description);
     
     /// @dev Emitted when a request is marked as processed (replay protection)
     event RequestProcessed(bytes32 indexed requestId);
 
-    constructor(address _mockUsdtAddress) {
-        mockUsdt = IERC20(_mockUsdtAddress);
+    constructor(address _usdtAddress) {
+        usdt = IERC20(_usdtAddress);
     }
 
     /// @notice Retrieve the encrypted balance for an account
@@ -157,8 +122,8 @@ contract CwUSDT is ZamaEthereumConfig {
         require(amount > 0, "Amount must be positive");
         require(amount <= type(uint128).max, "Amount exceeds uint128 max");
         
-        // Transfer MockUSDT from sender to this contract
-        require(mockUsdt.transferFrom(msg.sender, address(this), amount), "Transfer failed");
+        // Transfer USDT from sender to this contract
+        require(usdt.transferFrom(msg.sender, address(this), amount), "Transfer failed");
         
         // Cache state read: current balance (gas optimization)
         euint128 currentBalance = encryptedBalances[msg.sender];
@@ -167,12 +132,13 @@ contract CwUSDT is ZamaEthereumConfig {
         
         // Overflow protection
         ebool isOverflow = FHE.lt(newBalance, currentBalance);
-        euint128 maxUint32 = FHE.asEuint128(uint128(type(uint128).max));
-        euint128 safeBalance = FHE.select(isOverflow, maxUint32, newBalance);
+        euint128 maxUint128 = FHE.asEuint128(uint128(type(uint128).max));
+        euint128 safeBalance = FHE.select(isOverflow, maxUint128, newBalance);
         
         // Store and re-authorize
         encryptedBalances[msg.sender] = safeBalance;
         FHE.allowThis(safeBalance);
+        FHE.allow(safeBalance, msg.sender);
         
         emit Deposit(msg.sender, amount);
     }
@@ -201,22 +167,46 @@ contract CwUSDT is ZamaEthereumConfig {
     /// @dev Called by relayer after FHE coprocessor decrypts user balance. In production, this would be
     /// verified with signature checks (e.g., FHE.checkSignatures with EIP-712). Currently for testing,
     /// it validates amount <= actualBalance and transfers ERC20 to requester.
+    /// @param requestId The original withdrawal request ID
     /// @param requester The address requesting withdrawal
     /// @param amount The requested withdrawal amount
     /// @param actualBalance The decrypted actual balance (provided by relayer; validation occurs here)
-    function _withdrawCallback(address requester, uint256 amount, uint256 actualBalance) external {
+    function _withdrawCallback(bytes32 requestId, address requester, uint256 amount, uint256 actualBalance) external {
+        // Replay protection: reject if request already processed
+        require(!processedRequests[requestId], "Request already processed - replay attack prevented");
+        
+        // Request validation
+        WithdrawalRequest storage request = withdrawalRequests[requestId];
+        require(request.requester == requester, "Mismatched requester in withdrawal callback");
+        require(!request.processed, "Request already processed (check state)");
+        
         // In production, this would be called by the FHE coprocessor with signature verification
         // For now, simplified: just validate amount <= actualBalance and process
         require(amount > 0, "Amount must be positive");
         require(actualBalance >= amount, "Insufficient balance");
         
-        // Transfer MockUSDT from this contract to requester
-        bool transferred = mockUsdt.transfer(requester, amount);
-        require(transferred, "MockUSDT transfer failed");
+        // Update encrypted balance homomorphically before transferring plaintext
+        euint128 oldBalance = encryptedBalances[requester];
+        euint128 encryptedAmount = FHE.asEuint128(uint128(amount));
+        euint128 finalBalance = FHE.sub(oldBalance, encryptedAmount);
         
-        // Emit withdrawal event
+        // Store updated balance and re-authorize permissions
+        encryptedBalances[requester] = finalBalance;
+        FHE.allowThis(finalBalance);
+        FHE.allow(finalBalance, requester);
+        
+        // Transfer USDT from this contract to requester
+        bool transferred = usdt.transfer(requester, amount);
+        require(transferred, "USDT transfer failed");
+        
+        // Mark request as processed
+        request.processed = true;
+        processedRequests[requestId] = true;
+        
+        // Emit withdrawal events
         emit Withdraw(requester, amount);
         emit WithdrawalCompleted(requester, amount);
+        emit RequestProcessed(requestId);
     }
 
     /// @notice Transfer encrypted amount from sender to recipient with underflow protection
@@ -225,25 +215,21 @@ contract CwUSDT is ZamaEthereumConfig {
     /// prevents plaintext balance leakage via revert patterns.
     /// All FHE operations use FHE.lt (less-than comparison), FHE.sub/FHE.add (arithmetic), and FHE.select (conditional updates).
     /// @param recipient The recipient address
-    /// @param encryptedAmountHandle The transfer amount encoded as bytes (first 32 bytes = uint256 amount for testing)
-    function encryptedTransfer(address recipient, bytes calldata encryptedAmountHandle) external {
+    /// @param amountEuint128 The transfer amount encoded as euint128
+    /// @param inputProof The input proof bytes
+    function encryptedTransfer(address recipient, externalEuint128 amountEuint128, bytes calldata inputProof) external {
         require(recipient != address(0), "Invalid recipient");
-        require(encryptedAmountHandle.length > 0, "Invalid encrypted amount");
         
         // Decode transfer amount
-        uint256 amountToTransfer = uint256(bytes32(encryptedAmountHandle[:32]));
-        require(amountToTransfer > 0, "Transfer amount must be positive");
-        require(amountToTransfer <= type(uint128).max, "Amount exceeds uint128 max");
-        
+        euint128 encryptedAmountToTransfer = FHE.fromExternal(amountEuint128, inputProof);
         // Cache balance reads (gas optimization)
-        euint128 transferAmount = FHE.asEuint128(uint128(amountToTransfer));
         euint128 senderBalance = encryptedBalances[msg.sender];
         euint128 recipientBalance = encryptedBalances[recipient];
-        
+
         // Underflow check and conditional balance updates
-        ebool hasInsufficientBalance = FHE.lt(senderBalance, transferAmount);
-        euint128 newSenderBalance = FHE.sub(senderBalance, transferAmount);
-        euint128 newRecipientBalance = FHE.add(recipientBalance, transferAmount);
+        ebool hasInsufficientBalance = FHE.lt(senderBalance, encryptedAmountToTransfer);
+        euint128 newSenderBalance = FHE.sub(senderBalance, encryptedAmountToTransfer);
+        euint128 newRecipientBalance = FHE.add(recipientBalance, encryptedAmountToTransfer);
         
         euint128 finalSenderBalance = FHE.select(hasInsufficientBalance, senderBalance, newSenderBalance);
         euint128 finalRecipientBalance = FHE.select(hasInsufficientBalance, recipientBalance, newRecipientBalance);
@@ -252,12 +238,14 @@ contract CwUSDT is ZamaEthereumConfig {
         encryptedBalances[msg.sender] = finalSenderBalance;
         encryptedBalances[recipient] = finalRecipientBalance;
         FHE.allowThis(finalSenderBalance);
+        FHE.allow(finalSenderBalance, msg.sender);
         FHE.allowThis(finalRecipientBalance);
+        FHE.allow(finalRecipientBalance, recipient);
         
-        _setErrorCode(msg.sender, ERROR_INSUFFICIENT_BALANCE, "Insufficient balance for transfer");
-        
-        emit TransferError(msg.sender, recipient, ERROR_INSUFFICIENT_BALANCE);
-        emit EncryptedTransfer(msg.sender, recipient, amountToTransfer);
+        // Only emit error if transfer failed due to insufficient balance
+        // Note: We cannot decrypt hasInsufficientBalance on-chain, so we emit the event
+        // but the actual error state is encrypted. For MVP, we always emit EncryptedTransfer.
+        emit EncryptedTransfer(msg.sender, recipient, encryptedAmountToTransfer);
     }
     
     /// @notice Request user decryption of their encrypted balance
@@ -314,24 +302,6 @@ contract CwUSDT is ZamaEthereumConfig {
         return userDecryptedBalances[user];
     }
 
-    /// @notice Make a user's balance publicly decryptable for audit purposes
-    /// @dev Calls FHE.makePubliclyDecryptable on the encrypted balance
-    /// @param user The user whose balance should be made public
-    function makeBalancePubliclyDecryptable(address user) external {
-        // Mark balance as publicly decryptable
-        isBalancePubliclyDecryptable[user] = true;
-        
-        // Get encrypted balance
-        euint128 encryptedBalance = encryptedBalances[user];
-        
-        // Call FHE.makePubliclyDecryptable to allow external decryption for audit
-        // In production: this allows auditors to decrypt without user's private key
-        FHE.makePubliclyDecryptable(encryptedBalance);
-        
-        // Emit audit event
-        emit BalancePubliclyDecryptable(user, block.timestamp);
-    }
-
     /// @notice Grant or revoke transfer allowance for a spender
     /// @dev Owner can allow/disallow someone to transfer on their behalf
     /// @param spender The address to grant/revoke allowance to
@@ -343,88 +313,12 @@ contract CwUSDT is ZamaEthereumConfig {
         emit TransferAllowanceGranted(msg.sender, spender, allowed);
     }
 
-    /// @notice Grant transient access to spender for atomic swap operations
-    /// @dev Access expires at specified block number (for DEX atomic swaps)
-    /// @param spender The spender address to grant transient access
-    /// @param expiryBlock Block number at which access expires
-    function allowTransientForSwap(address spender, uint256 expiryBlock) external {
-        require(spender != address(0), "Invalid spender address");
-        require(expiryBlock > block.number, "Expiry block must be in the future");
-        
-        transientSwapAccess[msg.sender][spender] = expiryBlock;
-        emit TransientSwapAccessGranted(msg.sender, spender, expiryBlock);
-    }
-
-    /// @notice Check if an accessor can read a user's balance
-    /// @dev Short-circuit logic for gas optimization
-    /// @param user The user whose balance to check
-    /// @param accessor The address trying to access the balance
-    /// @return True if accessor is allowed to read user's balance
-    function isBalanceAccessible(address user, address accessor) external view returns (bool) {
-        return user == accessor || balanceAccessors[user][accessor] || isBalancePubliclyDecryptable[user];
-    }
-
-    /// @notice Grant balance read access to an accessor
-    /// @dev Fine-grained ACL for balance visibility
-    /// @param accessor The address to grant balance access to
-    function grantBalanceAccess(address accessor) external {
-        require(accessor != address(0), "Invalid accessor address");
-        balanceAccessors[msg.sender][accessor] = true;
-    }
-
-    /// @notice Revoke balance read access from an accessor
-    /// @param accessor The address to revoke balance access from
-    function revokeBalanceAccess(address accessor) external {
-        balanceAccessors[msg.sender][accessor] = false;
-    }
-
     /// @notice Check if spender has transfer allowance from owner
     /// @param owner The token owner
     /// @param spender The spender address
     /// @return True if spender is allowed to transfer owner's tokens
     function hasTransferAllowance(address owner, address spender) external view returns (bool) {
         return transferAllowance[owner][spender];
-    }
-
-    /// @notice Check if spender has active transient swap access
-    /// @param owner The token owner
-    /// @param spender The spender address
-    /// @return True if spender's transient access hasn't expired
-    function hasTransientAccess(address owner, address spender) external view returns (bool) {
-        return transientSwapAccess[owner][spender] > block.number;
-    }
-
-    /// @notice Set error code for a user's last operation
-    /// @dev Called internally to track non-reverting errors
-    /// @param user The user address
-    /// @param errorCode The error code to set
-    /// @param description Human-readable error description
-    function _setErrorCode(address user, uint256 errorCode, string memory description) internal {
-        lastErrorCode[user] = errorCode;
-        if (bytes(errorDescriptions[errorCode]).length == 0) {
-            errorDescriptions[errorCode] = description;
-        }
-        emit ErrorCodeSet(user, errorCode, description);
-    }
-
-    /// @notice Get the last error code for a user
-    /// @param user The user address
-    /// @return The last error code (0 if no error)
-    function getLastErrorCode(address user) external view returns (uint256) {
-        return lastErrorCode[user];
-    }
-
-    /// @notice Get error description for an error code
-    /// @param errorCode The error code
-    /// @return The human-readable error description
-    function getErrorDescription(uint256 errorCode) external view returns (string memory) {
-        return errorDescriptions[errorCode];
-    }
-
-    /// @notice Clear error code for a user
-    /// @dev User can clear their own error codes
-    function clearErrorCode() external {
-        lastErrorCode[msg.sender] = ERROR_NONE;
     }
 
     /// @notice Check if a request has already been processed

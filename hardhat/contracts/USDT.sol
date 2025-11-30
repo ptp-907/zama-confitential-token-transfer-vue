@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-contract MockUSDT {
-    string public name = "Mock USDT";
-    string public symbol = "mUSDT";
+contract USDT {
+    string public name = "USDT";
+    string public symbol = "USDT";
     uint8 public decimals = 18;
     uint256 private _totalSupply;
 
