@@ -1,155 +1,249 @@
-# 💚 Vue FHEVM Showcase
+# 🔐 ZAMA Confidential Token Transfer - Vue Application
 
-A Vue 3 application demonstrating the Universal FHEVM SDK with real FHEVM interactions on Sepolia testnet.
+A Vue 3 application enabling encrypted token transfers using ZAMA's Fully Homomorphic Encryption (FHE) on the Ethereum Sepolia testnet. This showcase demonstrates secure, privacy-preserving token transactions with encrypted state management.
 
 ## 🚀 **Quick Start**
 
 ```bash
-# Navigate to Vue showcase
-cd packages/vue-showcase
-
 # Install dependencies
 pnpm install
 
 # Start development server
 pnpm dev
 
-# Open http://localhost:3003
+# Open http://localhost:5173
 ```
 
 ## ✨ **Features**
 
-- ✅ **Real FHEVM interactions** - CDN-based FHEVM SDK
-- ✅ **EIP-712 user decryption** - Proper authentication
-- ✅ **Real contract interactions** - Sepolia testnet
-- ✅ **Composition API** - Modern Vue 3 patterns
-- ✅ **Beautiful UI** - Zama theme (yellow & black)
+- ✅ **Encrypted Token Transfers** - USDT transfers with FHE encryption
+- ✅ **Confidential Account Overview** - Encrypted balance tracking
+- ✅ **Secure Deposits & Withdrawals** - Privacy-preserving transactions
+- ✅ **Transaction History** - Encrypted transaction logs
+- ✅ **Real FHEVM Integration** - Sepolia testnet with cdnjs SDK
+- ✅ **EIP-712 User Decryption** - Secure authentication & decryption
+- ✅ **Modern Vue 3** - Composition API with TypeScript
+- ✅ **Beautiful UI** - Zama theme with responsive design
 
 ## 🔧 **Tech Stack**
 
-- **Vue 3** - Modern Vue with Composition API
-- **TypeScript** - Full type safety
-- **Vite** - Fast build tool
-- **Ethers.js** - Ethereum interactions
-- **@fhevm-sdk** - Universal FHEVM SDK with wagmi-like hooks
+- **Vue 3** - Progressive JavaScript framework with Composition API
+- **TypeScript** - Full type safety and better IDE support
+- **Vite** - Next-generation frontend tooling
+- **Ethers.js v6** - Ethereum interactions and smart contract communication
+- **fhevm-sdk** - Local FHEVM SDK for encryption/decryption
+- **Tailwind CSS** - Utility-first CSS framework (via inline styles)
 
-## 🎣 **Wagmi-like Hooks Usage**
-
-This showcase demonstrates the new wagmi-like hooks from the Universal FHEVM SDK:
-
-```typescript
-import { useWalletVue, useFhevmVue, useContractVue, useFhevmOperationsVue } from '@fhevm-sdk';
-
-export default {
-  setup() {
-    // Wallet connection hook
-    const { address, isConnected, connect, disconnect } = useWalletVue();
-    
-    // FHEVM instance management
-    const { fheInstance, isInitialized, initialize, error } = useFhevmVue();
-    
-    // Contract interactions
-    const { contract, isReady, error: contractError } = useContractVue(contractAddress, abi);
-    
-    // FHEVM operations (encrypt, decrypt, execute)
-    const { encrypt, decrypt, executeTransaction, isBusy, message } = useFhevmOperationsVue();
-    
-    return { address, isConnected, connect, disconnect, fheInstance, isInitialized, initialize };
-  }
-}
-```
-
-### **Vue Composables**
-
-The Vue showcase uses composables (Vue's equivalent of React hooks):
-
-- **`useWalletVue()`** - Wallet connection and management
-- **`useFhevmVue()`** - FHEVM instance initialization and state
-- **`useContractVue(address, abi)`** - Contract instance management
-- **`useFhevmOperationsVue()`** - Combined encryption, decryption, and transaction execution
-
-## 🎯 **What It Demonstrates**
-
-1. **Wallet Connection** - MetaMask integration
-2. **FHEVM Initialization** - CDN-based SDK setup
-3. **Contract Reading** - Real blockchain data
-4. **EIP-712 Decryption** - User authentication
-5. **Encrypted Input** - Contract interactions
-6. **Transaction Sending** - Real blockchain transactions
-
-## 🌐 **Live Demo**
-
-- **URL:** http://localhost:3003
-- **Contract:** `0xead137D42d2E6A6a30166EaEf97deBA1C3D1954e`
-- **Network:** Sepolia testnet (Chain ID: 11155111)
-
-## 📱 **Usage**
-
-1. **Connect Wallet** - Click "Connect Wallet" button
-2. **Get Count** - Read encrypted count from contract
-3. **Decrypt Count** - Use EIP-712 to decrypt the value
-4. **Increment/Decrement** - Send transactions to modify count
-
-## 🔐 **FHEVM Features**
-
-- **CDN-based SDK** - No bundling issues
-- **Composition API** - Modern Vue 3 patterns
-- **Real encryption** - Actual FHEVM encryption
-- **EIP-712 signing** - User authentication
-- **Contract interactions** - Real blockchain calls
-
-## 🏗️ **Architecture**
+## 🏗️ **Project Structure**
 
 ```
 src/
-├── App.vue                 # Main showcase component
-├── main.ts                 # Application entry point
-├── fhevm.ts               # FHEVM utilities
+├── App.vue                           # Main application component
+├── main.ts                           # Application entry point
+├── App.css                           # Global styles
+├── lib/
+│   └── fhevm.js                     # FHEVM utility functions
+├── components/
+│   ├── AccountOverview.vue          # Display encrypted balances
+│   ├── DepositToken.vue             # Deposit USDT to cwUSDT
+│   ├── SecureTransfer.vue           # Encrypted token transfers
+│   ├── TransactionHistory.vue       # View transaction logs
+│   └── WithdrawToken.vue            # Withdraw from cwUSDT to USDT
+├── composables/
+│   ├── useAccountData.ts            # Account balance & data management
+│   ├── useCryptoContracts.ts        # Smart contract interactions
+│   └── useTransactionHistory.ts     # Transaction history management
+├── config/
+│   └── contracts.ts                 # Contract addresses & ABIs
 └── types/
-    └── global.d.ts         # TypeScript declarations
+    └── (auto-generated hardhat types)
 ```
 
-## 🎨 **UI Components**
+## 💡 **Core Components**
 
-- **Wallet Connection** - MetaMask integration
-- **FHEVM Status** - SDK initialization status
-- **Counter Demo** - Real FHEVM interactions
-- **Transaction Status** - Real-time updates
+### **AccountOverview**
+Displays encrypted account information including:
+- Wallet address connection status
+- Encrypted USDT balance
+- Encrypted cwUSDT (confidential wrapped USDT) balance
+- Network information
 
-## 🛠️ **Development**
+### **DepositToken**
+Enables users to:
+- Deposit USDT into the cwUSDT confidential contract
+- Encrypt deposit amounts using FHEVM
+- Monitor transaction status
+
+### **SecureTransfer**
+Core secure transfer functionality:
+- Encrypted recipient address input
+- Encrypted transfer amount
+- FHE-powered transaction execution
+- Transaction status tracking
+
+### **WithdrawToken**
+Allows withdrawal operations:
+- Withdraw cwUSDT back to USDT
+- Encrypted withdrawal amounts
+- Balance validation
+
+### **TransactionHistory**
+View and track:
+- All encrypted transactions
+- Transaction timestamps
+- Transaction status
+- Amount details
+
+## 🎯 **Composables**
+
+Vue composables handle business logic:
+
+- **`useAccountData`** - Fetch and cache encrypted account balances
+- **`useCryptoContracts`** - Manage FHEVM contract instances and interactions
+- **`useTransactionHistory`** - Retrieve and filter transaction history
+
+## 📋 **Smart Contracts**
+
+### **USDT Contract**
+- Standard ERC-20 token interface
+- Address: `0xd4A46c0E812e3Ba4f533Bb41f26DB45597ECDfAA` (Sepolia)
+
+### **cwUSDT (Confidential Wrapped USDT)**
+- Encrypted balance management
+- Address: `0xdaBFb471cadB73D1aa31bA7f2a25c5B59aD33CED` (Sepolia)
+
+### **Network Configuration**
+- **Active Network:** Sepolia testnet
+- **Chain ID:** 11155111
+- **Network Name:** Ethereum Sepolia
+
+Switch networks in `src/config/contracts.ts`:
+```typescript
+export const ACTIVE_NETWORK: NetworkType = 'sepolia' // or 'localhost'
+```
+
+## 🔐 **FHEVM Security Features**
+
+- **End-to-End Encryption** - All sensitive data encrypted client-side
+- **EIP-712 Signing** - Secure user decryption requests
+- **Homomorphic Operations** - Computations on encrypted data
+- **Privacy Preservation** - Contract state remains encrypted
+- **CDN-based SDK** - Latest FHEVM operations via Zama's CDN
+
+## 🛠️ **Development Commands**
 
 ```bash
-# Start development server
+# Install dependencies
+pnpm install
+
+# Start development server (Vite)
 pnpm dev
 
 # Build for production
 pnpm build
 
-# Preview production build
+# Preview production build locally
 pnpm preview
+
+# Type checking
+pnpm type-check
+
+# Lint TypeScript
+pnpm lint
 ```
+
+## 🔗 **Wallet Integration**
+
+The application supports:
+- **MetaMask** - Primary wallet provider
+- **Other EIP-1193 compatible wallets**
+
+### Connect Wallet:
+1. Click "Connect Wallet" in the header
+2. Approve MetaMask connection
+3. Ensure you're on Sepolia testnet
+4. Start making encrypted transactions
 
 ## 📦 **Dependencies**
 
-- `vue` - Vue 3 framework
-- `vite` - Build tool
-- `ethers` - Ethereum interactions
-- `typescript` - Type safety
-- `vue-tsc` - TypeScript compiler
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `vue` | ^3.4.0 | Vue 3 framework |
+| `ethers` | ^6.13.1 | Ethereum interactions |
+| `fhevm-sdk` | local | FHEVM encryption/decryption |
+| `typescript` | ^5.0.0 | Type safety |
+| `vite` | ^5.0.0 | Build tooling |
 
-## 🔧 **Configuration**
+## 🌐 **Network Information**
 
-- **Vite Config** - Optimized for Vue 3
-- **TypeScript** - Full type safety
-- **CDN Import** - FHEVM SDK from Zama's CDN
-- **Composition API** - Modern Vue patterns
+- **Testnet:** Ethereum Sepolia
+- **ChainID:** 11155111
+- **Contract Addresses:** See `src/config/contracts.ts`
+- **FHEVM SDK:** CDN-hosted from Zama
+
+## 📱 **User Workflow**
+
+1. **Connect Wallet** → Link MetaMask to application
+2. **View Account** → See encrypted balance overview
+3. **Deposit Tokens** → Transfer USDT to cwUSDT contract
+4. **Transfer Securely** → Send encrypted token amounts
+5. **Withdraw Funds** → Convert cwUSDT back to USDT
+6. **Check History** → Review encrypted transaction logs
+
+## 🎨 **UI/UX Features**
+
+- **Real-time Status Indicators** - Network and FHEVM status
+- **Glass-morphism Design** - Modern card-based layout
+- **Responsive Layout** - Works on desktop and tablet
+- **Error Handling** - User-friendly error messages
+- **Transaction Feedback** - Progress indicators and confirmations
+- **Accessible Colors** - Zama theme (yellow/gold & black)
+
+## 🔄 **State Management**
+
+The application uses Vue's Composition API with:
+- Local reactive state via `ref()` and `reactive()`
+- Shared composables for cross-component data
+- FHEVM instance caching
+- Contract instance management
+
+## ⚙️ **Configuration**
+
+Edit `src/config/contracts.ts` to:
+- Change active network (localhost/sepolia)
+- Update contract addresses
+- Modify contract ABIs
+- Configure chain IDs
+
+## 🚨 **Important Notes**
+
+- **Testnet Only** - Currently configured for Sepolia testnet
+- **Requires MetaMask** - Wallet connection is mandatory
+- **Sufficient Gas** - Ensure account has ETH for gas fees
+- **USDT Balance** - Deposit at least some USDT to test transfers
+- **Network Switching** - Application validates correct network
 
 ## 🎉 **Success Metrics**
 
-- ✅ **Real FHEVM interactions** - No mocks
-- ✅ **EIP-712 authentication** - Proper user decryption
-- ✅ **Live contract integration** - Sepolia testnet
-- ✅ **Composition API** - Modern Vue 3 patterns
-- ✅ **Complete workflow** - From reading to transactions
+- ✅ **Encrypted Transactions** - All transfers use FHEVM encryption
+- ✅ **Real Contract Integration** - Live Sepolia testnet interaction
+- ✅ **Multi-component Architecture** - Modular, maintainable code
+- ✅ **Type Safety** - Full TypeScript coverage
+- ✅ **User-friendly Interface** - Intuitive, responsive UI
+- ✅ **Privacy-First Design** - Sensitive data always encrypted
 
-**Ready for production use!** 🚀
+## 📚 **Resources**
+
+- [ZAMA Documentation](https://docs.zama.ai/)
+- [FHEVM Documentation](https://docs.zama.ai/fhevm)
+- [Vue 3 Guide](https://vuejs.org/)
+- [Ethers.js Documentation](https://docs.ethers.org/v6/)
+- [Ethereum Sepolia Testnet](https://sepolia.etherscan.io/)
+
+## 📄 **License**
+
+This project is part of ZAMA's confidential computing showcase.
+
+---
+
+**Secure, Private, Encrypted Token Transfers with FHEVM** 🔐
