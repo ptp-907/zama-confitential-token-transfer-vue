@@ -21,6 +21,8 @@ export function useAccountData(options: UseAccountDataOptions) {
     const isLoadingUsdtBalance = ref(false)
     const isLoadingCwusdtBalance = ref(false)
     const isDepositing = ref(false)
+    const isWithdrawing = ref(false)
+    const isTransferring = ref(false)
     const isDecrypting = ref(false)
     const usdtError = ref<string>('')
     const cwUSDTError = ref<string>('')
@@ -137,6 +139,50 @@ export function useAccountData(options: UseAccountDataOptions) {
         }
     }
 
+    /* Withdrawal handling */
+    const handleWithdraw = async (amount: number) => {
+        if (!amount || amount <= 0) {
+            throw new Error('Invalid withdrawal amount')
+        }
+        
+        isWithdrawing.value = true
+        try {
+            await contractInteractions.handleWithdraw(amount)
+            onMessage('Withdrawal successful!')
+            
+            // Refresh balances after successful withdrawal
+            await fetchBalances()
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Withdrawal failed'
+            onMessage(errorMessage)
+            throw error
+        } finally {
+            isWithdrawing.value = false
+        }
+    }
+
+    /* Transfer handling */
+    const handleTransfer = async (recipient: string, amount: number) => {
+        if (!recipient || !amount || amount <= 0) {
+            throw new Error('Invalid transfer parameters')
+        }
+        
+        isTransferring.value = true
+        try {
+            await contractInteractions.handleEncryptedTransfer(recipient, amount)
+            onMessage('Transfer successful!')
+            
+            // Refresh balances after successful transfer
+            await fetchBalances()
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Transfer failed'
+            onMessage(errorMessage)
+            throw error
+        } finally {
+            isTransferring.value = false
+        }
+    }
+
     /**
      * Start polling balances every 15 seconds
      */
@@ -183,6 +229,8 @@ export function useAccountData(options: UseAccountDataOptions) {
         isLoadingUsdtBalance,
         isLoadingCwusdtBalance,
         isDepositing,
+        isWithdrawing,
+        isTransferring,
         isDecrypting,
         usdtBalance,
         usdtError,
@@ -195,6 +243,8 @@ export function useAccountData(options: UseAccountDataOptions) {
         fetchBalances,
         handleDecrypt,
         handleDeposit,
+        handleWithdraw,
+        handleTransfer,
         startBalancePolling,
         stopBalancePolling
     }

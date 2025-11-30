@@ -1,8 +1,30 @@
-// Contract addresses
-export const USDT_CONTRACT_ADDRESS =
-  "0xd4A46c0E812e3Ba4f533Bb41f26DB45597ECDfAA";
-export const CWUSDT_CONTRACT_ADDRESS =
-  "0xdaBFb471cadB73D1aa31bA7f2a25c5B59aD33CED";
+// Network Configuration
+export type NetworkType = 'localhost' | 'sepolia'
+
+// You can change this to switch networks
+export const ACTIVE_NETWORK: NetworkType = 'sepolia' // Change to 'sepolia' for Sepolia testnet
+
+// Network-specific contract addresses
+const NETWORK_CONTRACTS = {
+  localhost: {
+    USDT_CONTRACT_ADDRESS: '0xB4A13a1C25a92ABC0ae045136B12F03b90c74Bef',
+    CWUSDT_CONTRACT_ADDRESS: '0x8d62ACd1Edb243fb304760c4A137e640504DBdC7',
+    CHAIN_ID: 31337,
+    NETWORK_NAME: 'Localhost'
+  },
+  sepolia: {
+    USDT_CONTRACT_ADDRESS: '0xd4A46c0E812e3Ba4f533Bb41f26DB45597ECDfAA',
+    CWUSDT_CONTRACT_ADDRESS: '0xdaBFb471cadB73D1aa31bA7f2a25c5B59aD33CED',
+    CHAIN_ID: 11155111,
+    NETWORK_NAME: 'Sepolia'
+  }
+}
+
+// Export active network configuration
+export const USDT_CONTRACT_ADDRESS = NETWORK_CONTRACTS[ACTIVE_NETWORK].USDT_CONTRACT_ADDRESS
+export const CWUSDT_CONTRACT_ADDRESS = NETWORK_CONTRACTS[ACTIVE_NETWORK].CWUSDT_CONTRACT_ADDRESS
+export const EXPECTED_CHAIN_ID = NETWORK_CONTRACTS[ACTIVE_NETWORK].CHAIN_ID
+export const NETWORK_NAME = NETWORK_CONTRACTS[ACTIVE_NETWORK].NETWORK_NAME
 
 // USDT Contract ABI
 export const USDT_CONTRACT_ABI = [
