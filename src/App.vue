@@ -259,14 +259,6 @@
 
                 <!-- Main Content Grid -->
                 <div class="main-grid">
-                    <!-- FHEVM Counter Demo -->
-                    <!-- <FheCounter 
-                        :account="account" 
-                        :chainId="chainId" 
-                        :isConnected="isConnected"
-                        :fhevmStatus="fhevmStatus" 
-                        :onMessage="(msg) => message = msg" />
- -->
                     <!-- Deposit Token -->
                     <DepositToken 
                         :account="account" 
@@ -305,16 +297,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { ethers } from 'ethers'
-import { initializeFheInstance, publicDecrypt } from './lib/fhevm'
-import FheCounter from './components/FheCounter.vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { initializeFheInstance } from './lib/fhevm'
 import AccountOverview from './components/AccountOverview.vue'
 import DepositToken from './components/DepositToken.vue'
 import WithdrawToken from './components/WithdrawToken.vue'
 import SecureTransfer from './components/SecureTransfer.vue'
 import TransactionHistory from './components/TransactionHistory.vue'
 import { EXPECTED_CHAIN_ID, NETWORK_NAME } from './config/contracts'
+
+// LocalStorage keys for persistence
+const STORAGE_KEYS = {
+    IS_CONNECTED: 'wallet_is_connected',
+    LAST_ACCOUNT: 'wallet_last_account'
+}
 
 // Contract configuration
 const CONTRACT_ADDRESSES = {
@@ -415,6 +411,10 @@ const connectWallet = async () => {
         chainId.value = parseInt(chainIdHex, 16)
         isConnected.value = true
 
+        // Persist connection state
+        localStorage.setItem(STORAGE_KEYS.IS_CONNECTED, 'true')
+        localStorage.setItem(STORAGE_KEYS.LAST_ACCOUNT, accounts[0])
+
         console.log('Wallet connected successfully!')
 
         // Initialize FHEVM after wallet connection
@@ -422,6 +422,62 @@ const connectWallet = async () => {
     } catch (error) {
         console.error('Wallet connection failed:', error)
         alert(`Wallet connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+}
+
+// Auto-reconnect wallet on page load
+const autoReconnectWallet = async () => {
+    console.log('Checking for existing wallet connection...')
+
+    // Check if user was previously connected
+    const wasConnected = localStorage.getItem(STORAGE_KEYS.IS_CONNECTED)
+    
+    if (!wasConnected || wasConnected !== 'true') {
+        console.log('No previous connection found')
+        return
+    }
+
+    if (!window.ethereum) {
+        console.log('No Ethereum provider found - clearing persisted state')
+        localStorage.removeItem(STORAGE_KEYS.IS_CONNECTED)
+        localStorage.removeItem(STORAGE_KEYS.LAST_ACCOUNT)
+        return
+    }
+
+    try {
+        console.log('Attempting silent reconnection...')
+        
+        // Silently check for authorized accounts (does not trigger popup)
+        const accounts = await window.ethereum.request({ method: 'eth_accounts' })
+        
+        if (accounts && accounts.length > 0) {
+            console.log('Found authorized accounts:', accounts)
+            
+            const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' })
+            
+            account.value = accounts[0]
+            chainId.value = parseInt(chainIdHex, 16)
+            isConnected.value = true
+
+            // Update last account
+            localStorage.setItem(STORAGE_KEYS.LAST_ACCOUNT, accounts[0])
+
+            console.log('✅ Auto-reconnected successfully!')
+            message.value = 'Wallet reconnected automatically'
+            setTimeout(() => message.value = '', 2000)
+
+            // Initialize FHEVM after auto-reconnection
+            await initializeFhevm()
+        } else {
+            console.log('No authorized accounts found - clearing persisted state')
+            localStorage.removeItem(STORAGE_KEYS.IS_CONNECTED)
+            localStorage.removeItem(STORAGE_KEYS.LAST_ACCOUNT)
+        }
+    } catch (error) {
+        console.error('Auto-reconnection failed:', error)
+        // Clear persisted state on error
+        localStorage.removeItem(STORAGE_KEYS.IS_CONNECTED)
+        localStorage.removeItem(STORAGE_KEYS.LAST_ACCOUNT)
     }
 }
 
@@ -494,8 +550,81 @@ const disconnectWallet = () => {
     message.value = ''
     networkError.value = ''
     isSwitchingNetwork.value = false
+    
+    // Clear persisted connection state
+    localStorage.removeItem(STORAGE_KEYS.IS_CONNECTED)
+    localStorage.removeItem(STORAGE_KEYS.LAST_ACCOUNT)
+    
     console.log('Wallet disconnected')
 }
+
+// Handle account changes from MetaMask
+const handleAccountsChanged = async (accounts: string[]) => {
+    console.log('Accounts changed:', accounts)
+    
+    if (accounts.length === 0) {
+        // User disconnected from MetaMask
+        console.log('User disconnected from MetaMask')
+        disconnectWallet()
+    } else if (accounts[0] !== account.value) {
+        // User switched to a different account
+        console.log('User switched account from', account.value, 'to', accounts[0])
+        account.value = accounts[0]
+        localStorage.setItem(STORAGE_KEYS.LAST_ACCOUNT, accounts[0])
+        message.value = 'Account changed'
+        setTimeout(() => message.value = '', 2000)
+    }
+}
+
+// Handle chain changes from MetaMask
+const handleChainChanged = (chainIdHex: string) => {
+    console.log('Chain changed:', chainIdHex)
+    const newChainId = parseInt(chainIdHex, 16)
+    chainId.value = newChainId
+    
+    // Reload the page as recommended by MetaMask docs
+    // to avoid state inconsistencies
+    window.location.reload()
+}
+
+// Setup event listeners for MetaMask
+const setupEventListeners = () => {
+    if (!window.ethereum) return
+
+    // Listen for account changes
+    window.ethereum.on('accountsChanged', handleAccountsChanged)
+    
+    // Listen for chain changes
+    window.ethereum.on('chainChanged', handleChainChanged)
+    
+    console.log('✅ MetaMask event listeners registered')
+}
+
+// Cleanup event listeners
+const cleanupEventListeners = () => {
+    if (!window.ethereum) return
+
+    window.ethereum.removeListener('accountsChanged', handleAccountsChanged)
+    window.ethereum.removeListener('chainChanged', handleChainChanged)
+    
+    console.log('🧹 MetaMask event listeners cleaned up')
+}
+
+// Initialize app on mount
+onMounted(async () => {
+    console.log('App mounted - initializing...')
+    
+    // Setup MetaMask event listeners
+    setupEventListeners()
+    
+    // Attempt auto-reconnection
+    await autoReconnectWallet()
+})
+
+// Cleanup on unmount
+onUnmounted(() => {
+    cleanupEventListeners()
+})
 
 </script>
 
